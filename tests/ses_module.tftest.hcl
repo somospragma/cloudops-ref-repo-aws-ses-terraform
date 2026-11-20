@@ -8,9 +8,9 @@ mock_provider "aws" {
   override_during = plan
 
   override_resource {
-    target = aws_sesv2_email_identity.this["pragma"]
+    target = aws_sesv2_email_identity.this["main"]
     values = {
-      arn                     = "arn:aws:ses:us-east-1:654767188854:identity/pragma.com.co"
+      arn                     = "arn:aws:ses:us-east-1:111111111111:identity/example.com"
       region                  = "us-east-1"
       dkim_signing_attributes = { tokens = ["tok1", "tok2", "tok3"] }
     }
@@ -18,24 +18,23 @@ mock_provider "aws" {
 }
 
 variables {
-  client      = "pragma"
+  client      = "acme"
   project     = "notif"
-  environment = "pdn"
-  account_id  = "654767188854"
+  environment = "dev"
+  account_id  = "111111111111"
 
   ses_identities_config = {
-    "pragma" = {
-      identity              = "pragma.com.co"
+    "main" = {
+      identity              = "example.com"
       identity_type         = "DOMAIN"
       configuration_set_key = "default"
-      mail_from             = { domain = "mail.pragma.com.co" }
+      mail_from             = { domain = "mail.example.com" }
       sending_authorization = {
-        "AllowLicenseProcessingLambda" = {
-          principals             = ["arn:aws:iam::533267042257:role/service-role/pragma-license-pdn-role-lambda-license-license-processing"]
-          allowed_from_addresses = ["licenciasgenia@pragma.com.co"]
+        "AllowInvoiceSender" = {
+          principals             = ["arn:aws:iam::222222222222:role/service-role/acme-billing-dev-role-lambda-billing-invoice-sender"]
+          allowed_from_addresses = ["no-reply@example.com"]
         }
       }
-      functionality = "transactional-email"
     }
   }
 
@@ -44,10 +43,9 @@ variables {
       event_destinations = {
         "events" = {
           matching_event_types = ["BOUNCE", "COMPLAINT"]
-          sns_topic_arn        = "arn:aws:sns:us-east-1:654767188854:pragma-notif-pdn-sns-ses-events"
+          sns_topic_arn        = "arn:aws:sns:us-east-1:111111111111:acme-notif-dev-sns-ses-events"
         }
       }
-      functionality = "transactional-email"
     }
   }
 }
@@ -58,22 +56,22 @@ run "naming_and_security_defaults" {
   command = plan
 
   assert {
-    condition     = aws_sesv2_configuration_set.this["default"].configuration_set_name == "pragma-notif-pdn-ses-default"
+    condition     = aws_sesv2_configuration_set.this["default"].configuration_set_name == "acme-notif-dev-ses-default"
     error_message = "Configuration set name must follow {client}-{project}-{environment}-ses-{key} (PC-IAC-003)."
   }
 
   assert {
-    condition     = aws_sesv2_configuration_set_event_destination.this["default-events"].event_destination_name == "pragma-notif-pdn-ses-events"
+    condition     = aws_sesv2_configuration_set_event_destination.this["default-events"].event_destination_name == "acme-notif-dev-ses-events"
     error_message = "Event destination name must follow {client}-{project}-{environment}-ses-{key} (PC-IAC-003)."
   }
 
   assert {
-    condition     = aws_sesv2_email_identity_policy.this["pragma"].policy_name == "pragma-notif-pdn-ses-pragma"
+    condition     = aws_sesv2_email_identity_policy.this["main"].policy_name == "acme-notif-dev-ses-main"
     error_message = "Policy name must follow {client}-{project}-{environment}-ses-{key} (PC-IAC-003)."
   }
 
   assert {
-    condition     = aws_sesv2_email_identity.this["pragma"].email_identity == "pragma.com.co"
+    condition     = aws_sesv2_email_identity.this["main"].email_identity == "example.com"
     error_message = "Identity must keep the real domain without governance prefix."
   }
 
@@ -83,7 +81,7 @@ run "naming_and_security_defaults" {
   }
 
   assert {
-    condition     = aws_sesv2_email_identity.this["pragma"].dkim_signing_attributes[0].next_signing_key_length == "RSA_2048_BIT"
+    condition     = aws_sesv2_email_identity.this["main"].dkim_signing_attributes[0].next_signing_key_length == "RSA_2048_BIT"
     error_message = "DKIM must default to RSA_2048_BIT (PC-IAC-020)."
   }
 
@@ -93,12 +91,17 @@ run "naming_and_security_defaults" {
   }
 
   assert {
-    condition     = aws_sesv2_email_identity.this["pragma"].tags["ManagedBy"] == "terraform" && aws_sesv2_email_identity.this["pragma"].tags["Module"] == "ses-module" && aws_sesv2_email_identity.this["pragma"].tags["Name"] == "pragma.com.co"
-    error_message = "Module tags Name, ManagedBy and Module must be applied (PC-IAC-004)."
+    condition     = aws_sesv2_email_identity.this["main"].tags == tomap({ name = "example.com" })
+    error_message = "Module must only add the name tag plus additional_tags (PC-IAC-004)."
   }
 
   assert {
-    condition     = aws_sesv2_email_identity.this["pragma"].configuration_set_name == "pragma-notif-pdn-ses-default"
+    condition     = aws_sesv2_configuration_set.this["default"].tags == tomap({ name = "acme-notif-dev-ses-default" })
+    error_message = "Configuration set must only have the name tag plus additional_tags."
+  }
+
+  assert {
+    condition     = aws_sesv2_email_identity.this["main"].configuration_set_name == "acme-notif-dev-ses-default"
     error_message = "Identity must use the referenced configuration set by default."
   }
 }
@@ -107,22 +110,22 @@ run "policy_document" {
   command = plan
 
   assert {
-    condition     = jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Sid == "AllowLicenseProcessingLambda"
+    condition     = jsondecode(aws_sesv2_email_identity_policy.this["main"].policy).Statement[0].Sid == "AllowInvoiceSender"
     error_message = "Statement Sid must be the sending_authorization key."
   }
 
   assert {
-    condition     = jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Resource == "arn:aws:ses:us-east-1:654767188854:identity/pragma.com.co"
+    condition     = jsondecode(aws_sesv2_email_identity_policy.this["main"].policy).Statement[0].Resource == "arn:aws:ses:us-east-1:111111111111:identity/example.com"
     error_message = "Policy resource must be the identity ARN."
   }
 
   assert {
-    condition     = jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Condition.StringEquals["ses:FromAddress"] == ["licenciasgenia@pragma.com.co"]
+    condition     = jsondecode(aws_sesv2_email_identity_policy.this["main"].policy).Statement[0].Condition.StringEquals["ses:FromAddress"] == ["no-reply@example.com"]
     error_message = "Policy must restrict ses:FromAddress."
   }
 
   assert {
-    condition     = !can(jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Condition.StringEquals["aws:SourceAccount"])
+    condition     = !can(jsondecode(aws_sesv2_email_identity_policy.this["main"].policy).Statement[0].Condition.StringEquals["aws:SourceAccount"])
     error_message = "Empty source_accounts must not generate an aws:SourceAccount condition."
   }
 }
@@ -131,27 +134,27 @@ run "dns_records_output" {
   command = plan
 
   assert {
-    condition     = length(output.dns_records["pragma"]) == 6
+    condition     = length(output.dns_records["main"]) == 6
     error_message = "Expected 3 DKIM CNAME + MX + SPF TXT + DMARC TXT."
   }
 
   assert {
-    condition     = output.dns_records["pragma"][0].name == "tok1._domainkey.pragma.com.co" && output.dns_records["pragma"][0].value == "tok1.dkim.amazonses.com"
+    condition     = output.dns_records["main"][0].name == "tok1._domainkey.example.com" && output.dns_records["main"][0].value == "tok1.dkim.amazonses.com"
     error_message = "Bad DKIM CNAME record."
   }
 
   assert {
-    condition     = output.dns_records["pragma"][3].type == "MX" && output.dns_records["pragma"][3].value == "10 feedback-smtp.us-east-1.amazonses.com"
+    condition     = output.dns_records["main"][3].type == "MX" && output.dns_records["main"][3].value == "10 feedback-smtp.us-east-1.amazonses.com"
     error_message = "Bad MAIL FROM MX record."
   }
 
   assert {
-    condition     = output.dns_records["pragma"][4].value == "v=spf1 include:amazonses.com ~all"
+    condition     = output.dns_records["main"][4].value == "v=spf1 include:amazonses.com ~all"
     error_message = "Bad SPF record."
   }
 
   assert {
-    condition     = output.dns_records["pragma"][5].name == "_dmarc.pragma.com.co"
+    condition     = output.dns_records["main"][5].name == "_dmarc.example.com"
     error_message = "Bad DMARC record."
   }
 }
@@ -162,14 +165,13 @@ run "root_injected_names" {
   variables {
     ses_configuration_sets_config = {
       "default" = {
-        configuration_set_name = "pragma-notif-pdn-ses-main"
-        functionality          = "x"
+        configuration_set_name = "acme-notif-dev-ses-main"
       }
     }
   }
 
   assert {
-    condition     = aws_sesv2_configuration_set.this["default"].configuration_set_name == "pragma-notif-pdn-ses-main"
+    condition     = aws_sesv2_configuration_set.this["default"].configuration_set_name == "acme-notif-dev-ses-main"
     error_message = "Root-injected name must be used as-is (PC-IAC-025)."
   }
 }
@@ -179,17 +181,16 @@ run "same_account_without_from_allowed" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "SameAccount" = { principals = ["arn:aws:iam::654767188854:role/app"] } }
+        sending_authorization = { "SameAccount" = { principals = ["arn:aws:iam::111111111111:role/app"] } }
       }
     }
   }
 
   assert {
-    condition     = !can(jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Condition)
+    condition     = !can(jsondecode(aws_sesv2_email_identity_policy.this["main"].policy).Statement[0].Condition)
     error_message = "Statements without conditions must omit Condition."
   }
 }
@@ -199,7 +200,7 @@ run "email_identity_without_dns" {
 
   variables {
     ses_identities_config = {
-      "ops" = { identity = "ops@pragma.com.co", identity_type = "EMAIL", functionality = "x" }
+      "ops" = { identity = "ops@example.com", identity_type = "EMAIL" }
     }
   }
 
@@ -220,7 +221,6 @@ run "cloudwatch_destination" {
   variables {
     ses_configuration_sets_config = {
       "default" = {
-        functionality = "x"
         event_destinations = {
           "metrics" = {
             matching_event_types  = ["SEND", "DELIVERY"]
@@ -244,11 +244,10 @@ run "reject_cross_account_without_from" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "Other" = { principals = ["arn:aws:iam::533267042257:role/app"] } }
+        sending_authorization = { "Other" = { principals = ["arn:aws:iam::222222222222:role/app"] } }
       }
     }
   }
@@ -261,11 +260,10 @@ run "reject_wildcard_principal" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "Any" = { principals = ["*"], allowed_from_addresses = ["a@pragma.com.co"] } }
+        sending_authorization = { "Any" = { principals = ["*"], allowed_from_addresses = ["a@example.com"] } }
       }
     }
   }
@@ -278,11 +276,10 @@ run "reject_wildcard_action" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "Any" = { principals = ["arn:aws:iam::654767188854:root"], actions = ["ses:*"] } }
+        sending_authorization = { "Any" = { principals = ["arn:aws:iam::111111111111:root"], actions = ["ses:*"] } }
       }
     }
   }
@@ -295,11 +292,10 @@ run "reject_from_address_wildcard" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "X" = { principals = ["arn:aws:iam::533267042257:root"], allowed_from_addresses = ["*@pragma.com.co"] } }
+        sending_authorization = { "X" = { principals = ["arn:aws:iam::222222222222:root"], allowed_from_addresses = ["*@example.com"] } }
       }
     }
   }
@@ -312,11 +308,10 @@ run "reject_from_address_other_domain" {
 
   variables {
     ses_identities_config = {
-      "pragma" = {
-        identity              = "pragma.com.co"
+      "main" = {
+        identity              = "example.com"
         identity_type         = "DOMAIN"
-        functionality         = "x"
-        sending_authorization = { "X" = { principals = ["arn:aws:iam::533267042257:root"], allowed_from_addresses = ["a@evil.com"] } }
+        sending_authorization = { "X" = { principals = ["arn:aws:iam::222222222222:root"], allowed_from_addresses = ["a@evil.com"] } }
       }
     }
   }
@@ -328,7 +323,7 @@ run "reject_tls_optional_without_flag" {
   command = plan
 
   variables {
-    ses_configuration_sets_config = { "default" = { tls_policy = "OPTIONAL", functionality = "x" } }
+    ses_configuration_sets_config = { "default" = { tls_policy = "OPTIONAL" } }
   }
 
   expect_failures = [var.ses_configuration_sets_config]
@@ -338,7 +333,7 @@ run "allow_tls_optional_with_flag" {
   command = plan
 
   variables {
-    ses_configuration_sets_config = { "default" = { tls_policy = "OPTIONAL", allow_optional_tls = true, functionality = "x" } }
+    ses_configuration_sets_config = { "default" = { tls_policy = "OPTIONAL", allow_optional_tls = true } }
   }
 
   assert {
@@ -354,7 +349,7 @@ run "reject_mail_from_not_subdomain" {
 
   variables {
     ses_identities_config = {
-      "pragma" = { identity = "pragma.com.co", identity_type = "DOMAIN", functionality = "x", mail_from = { domain = "mail.otro.com" } }
+      "main" = { identity = "example.com", identity_type = "DOMAIN", mail_from = { domain = "mail.otro.com" } }
     }
   }
 
@@ -366,7 +361,7 @@ run "reject_mail_from_on_email_identity" {
 
   variables {
     ses_identities_config = {
-      "ops" = { identity = "ops@pragma.com.co", identity_type = "EMAIL", functionality = "x", mail_from = { domain = "mail.pragma.com.co" } }
+      "ops" = { identity = "ops@example.com", identity_type = "EMAIL", mail_from = { domain = "mail.example.com" } }
     }
   }
 
@@ -378,7 +373,7 @@ run "reject_invalid_identity_type" {
 
   variables {
     ses_identities_config = {
-      "pragma" = { identity = "pragma.com.co", identity_type = "EMAIL_ADDRESS", functionality = "x" }
+      "main" = { identity = "example.com", identity_type = "EMAIL_ADDRESS" }
     }
   }
 
@@ -390,7 +385,7 @@ run "reject_invalid_domain" {
 
   variables {
     ses_identities_config = {
-      "pragma" = { identity = "not a domain", identity_type = "DOMAIN", functionality = "x" }
+      "main" = { identity = "not a domain", identity_type = "DOMAIN" }
     }
   }
 
@@ -402,7 +397,7 @@ run "reject_invalid_dkim_length" {
 
   variables {
     ses_identities_config = {
-      "pragma" = { identity = "pragma.com.co", identity_type = "DOMAIN", functionality = "x", dkim_signing_key_length = "RSA_4096_BIT" }
+      "main" = { identity = "example.com", identity_type = "DOMAIN", dkim_signing_key_length = "RSA_4096_BIT" }
     }
   }
 
@@ -415,8 +410,7 @@ run "reject_invalid_event_type" {
   variables {
     ses_configuration_sets_config = {
       "default" = {
-        functionality      = "x"
-        event_destinations = { "a" = { matching_event_types = ["BOUNCES"], event_bus_arn = "arn:aws:events:us-east-1:654767188854:event-bus/default" } }
+        event_destinations = { "a" = { matching_event_types = ["BOUNCES"], event_bus_arn = "arn:aws:events:us-east-1:111111111111:event-bus/default" } }
       }
     }
   }
@@ -430,12 +424,11 @@ run "reject_two_destinations" {
   variables {
     ses_configuration_sets_config = {
       "default" = {
-        functionality = "x"
         event_destinations = {
           "a" = {
             matching_event_types = ["BOUNCE"]
-            sns_topic_arn        = "arn:aws:sns:us-east-1:654767188854:t"
-            event_bus_arn        = "arn:aws:events:us-east-1:654767188854:event-bus/default"
+            sns_topic_arn        = "arn:aws:sns:us-east-1:111111111111:t"
+            event_bus_arn        = "arn:aws:events:us-east-1:111111111111:event-bus/default"
           }
         }
       }
@@ -450,7 +443,7 @@ run "reject_missing_configuration_set_key" {
 
   variables {
     ses_identities_config = {
-      "pragma" = { identity = "pragma.com.co", identity_type = "DOMAIN", functionality = "x", configuration_set_key = "nope" }
+      "main" = { identity = "example.com", identity_type = "DOMAIN", configuration_set_key = "nope" }
     }
   }
 
@@ -465,6 +458,33 @@ run "reject_name_longer_than_28" {
   }
 
   expect_failures = [aws_sesv2_configuration_set.this]
+}
+
+run "additional_tags_merged" {
+  command = plan
+
+  variables {
+    ses_identities_config = {
+      "main" = { identity = "example.com", identity_type = "DOMAIN", additional_tags = { functionality = "transactional-email" } }
+    }
+  }
+
+  assert {
+    condition     = aws_sesv2_email_identity.this["main"].tags == tomap({ name = "example.com", functionality = "transactional-email" })
+    error_message = "additional_tags must be merged with the name tag."
+  }
+}
+
+run "reject_uppercase_tags" {
+  command = plan
+
+  variables {
+    ses_identities_config = {
+      "main" = { identity = "example.com", identity_type = "DOMAIN", additional_tags = { Owner = "CloudOps" } }
+    }
+  }
+
+  expect_failures = [var.ses_identities_config]
 }
 
 run "reject_invalid_account_id" {

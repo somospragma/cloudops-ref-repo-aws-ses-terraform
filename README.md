@@ -69,7 +69,7 @@ ses_identities_config = {
         allowed_from_addresses = ["no-reply@example.com"]
       }
     }
-    functionality = "transactional-email"
+    additional_tags = { functionality = "transactional-email" }
   }
 }
 
@@ -83,7 +83,7 @@ ses_configuration_sets_config = {
         sns_topic_arn          = "<ARN desde data.aws_sns_topic>"
       }
     }
-    functionality = "transactional-email"
+    additional_tags = { functionality = "transactional-email" }
   }
 }
 ```
@@ -117,8 +117,7 @@ La key del mapa (`^[a-z0-9-]+$`, máximo 20 caracteres) nombra la política y lo
 | `policy_name` | `string` | `""` | Nombre final de la política inyectado por el Root (máximo 28). |
 | `mail_from` | `object` | `null` | `{ domain, behavior_on_mx_failure = "USE_DEFAULT_VALUE" }`. Solo DOMAIN; `domain` debe ser subdominio de `identity`. |
 | `sending_authorization` | `map(object)` | `{}` | Statements de envío delegado; la key es el `Sid` (alfanumérico). Ver tabla siguiente. |
-| `functionality` | `string` | n/a | Tag `Functionality`. |
-| `additional_tags` | `map(string)` | `{}` | Tags propios de la identidad. |
+| `additional_tags` | `map(string)` | `{}` | Tags propios de la identidad. Llaves y valores en minúscula. |
 
 `sending_authorization[<Sid>]`:
 
@@ -140,8 +139,7 @@ La key del mapa (`^[a-z0-9-]+$`, máximo 20 caracteres) nombra la política y lo
 | `sending_enabled` | `bool` | `true` | Habilita el envío con el configuration set. |
 | `suppressed_reasons` | `list(string)` | `["BOUNCE", "COMPLAINT"]` | Razones de supresión. |
 | `event_destinations` | `map(object)` | `{}` | Ver tabla siguiente. |
-| `functionality` | `string` | n/a | Tag `Functionality`. |
-| `additional_tags` | `map(string)` | `{}` | Tags propios. |
+| `additional_tags` | `map(string)` | `{}` | Tags propios. Llaves y valores en minúscula. |
 
 `event_destinations[<key>]`, con exactamente uno de `sns_topic_arn`, `event_bus_arn` o `cloudwatch_dimensions`:
 
@@ -194,7 +192,7 @@ El módulo no contiene valores de ningún proyecto: dominios, correos, ARN de ro
 | TLS, métricas de reputación, envío activo, supresión | `ses_configuration_sets_config.<key>.*` |
 | Destino de eventos y tipos de evento | `event_destinations.<key>`: `sns_topic_arn` \| `event_bus_arn` \| `cloudwatch_dimensions` |
 | Nombres finales de los recursos | `policy_name`, `configuration_set_name`, `event_destination_name` |
-| Tags propios | `functionality`, `additional_tags` |
+| Tags propios (llaves y valores en minúscula) | `additional_tags` |
 
 ### Defaults seguros (se pueden cambiar)
 
@@ -215,7 +213,7 @@ El módulo no contiene valores de ningún proyecto: dominios, correos, ARN de ro
 | Patrón de nombres (si el Root no inyecta el nombre) | `{client}-{project}-{environment}-ses-{key}` |
 | Largo máximo de nombres | 28 caracteres (PC-IAC-003) |
 | Largo máximo de las keys de los mapas | 20 caracteres, `^[a-z0-9-]+$` |
-| Tags del módulo | `ManagedBy = "terraform"`, `Module = "ses-module"`, `Name` |
+| Tags del módulo | Solo `name` (nombre del recurso, PC-IAC-004). El resto viene de `default_tags` del provider y de `additional_tags` |
 | Protección de la identidad | `prevent_destroy = true` |
 | TTL de `dns_records` | 1800 |
 | SPF de MAIL FROM | `v=spf1 include:amazonses.com ~all` |
@@ -230,6 +228,7 @@ El módulo no contiene valores de ningún proyecto: dominios, correos, ARN de ro
 - `tls_policy = "OPTIONAL"` solo se acepta con `allow_optional_tls = true`.
 - `mail_from` solo aplica a identidades DOMAIN, y su dominio debe ser subdominio de la identidad.
 - `configuration_set_key` debe existir en `ses_configuration_sets_config`.
+- Las llaves y los valores de `additional_tags` deben estar en minúscula.
 - Cada destino de eventos define exactamente uno de SNS, EventBridge (bus `default`) o CloudWatch.
 
 ### No soportado en v1
@@ -255,7 +254,7 @@ Si un proyecto lo necesita, se agrega en una versión menor:
 - **Cuota y sandbox en envío cross-account.** Con sending authorization el correo cuenta contra la cuota de envío, la reputación y el estado de sandbox de la **cuenta que envía** (la delegada), no de la dueña de la identidad. La cuenta delegada debe salir de su propio sandbox, y su rol necesita permisos IAM `ses:SendEmail`/`ses:SendRawEmail` sobre el ARN de la identidad.
 - **DNS.** Publica el output `dns_records` en la zona pública del dominio desde el dominio de Networking/DNS, que puede estar en otra cuenta (PC-IAC-022, PC-IAC-023).
 - **DMARC.** El módulo solo lo sugiere; la política DMARC del dominio la decide su dueño. Empieza con `p=none` y un `rua`, y sube a `quarantine`/`reject` cuando DKIM y SPF estén alineados.
-- **Tags transversales.** `Client`, `Project`, `Environment`, `Owner` y `CostCenter` llegan por `default_tags` del provider en el Root (PC-IAC-004).
+- **Tags transversales.** `client`, `project`, `environment`, `owner` y `costcenter` llegan por `default_tags` del provider en el Root (PC-IAC-004). El módulo no agrega tags propios aparte de `name`.
 
 ## Cumplimiento PC-IAC
 
@@ -264,12 +263,12 @@ Si un proyecto lo necesita, se agrega en una versión menor:
 | PC-IAC-001 | 10 archivos raíz y `sample/` con los 8 archivos del patrón PC-IAC-026. |
 | PC-IAC-002 / 024 | Toda variable con `type`, `description` y `validation`; colecciones `map(object)` con `optional()` y `default = {}`. |
 | PC-IAC-003 / 025 | `{client}-{project}-{environment}-ses-{key}` de máximo 28 caracteres; el Root puede inyectar el nombre final. La identidad conserva su nombre real. |
-| PC-IAC-004 / 012 | `Name` explícito + `local.base_module_tags` + `additional_tags`; tags transversales por `default_tags`. |
+| PC-IAC-004 | Tags = `default_tags` del provider + `name` explícito + `additional_tags`, todo en minúscula. |
 | PC-IAC-005 / 006 | Sin bloque provider; `configuration_aliases = [aws.project]`; `provider = aws.project` en cada recurso. |
 | PC-IAC-007 / 014 | Outputs granulares como mapas por key; bloques `dynamic` para destinos y dimensiones. |
 | PC-IAC-009 / 010 / 012 | Strings opcionales con `""` y `length() ? :`; `flatten()` + mapa para `for_each`; `prevent_destroy` en la identidad. |
 | PC-IAC-011 / 023 | Sin data sources; solo recursos intrínsecos a SES (sin DNS, IAM ni SNS). |
-| PC-IAC-018 | `tests/ses_module.tftest.hcl` (25 pruebas con provider mock). |
+| PC-IAC-018 | `tests/ses_module.tftest.hcl` (27 pruebas con provider mock). |
 | PC-IAC-020 | TLS `REQUIRE`, DKIM 2048, sin comodines en principals, acciones ni remitentes, `ses:FromAddress` obligatorio en cross-account, supresión de BOUNCE/COMPLAINT. |
 
 ## Decisiones de diseño

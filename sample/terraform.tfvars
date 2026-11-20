@@ -1,68 +1,69 @@
 # Valores de variables para el ejemplo (PC-IAC-026)
+# Datos dummy: reemplazar por los valores de cada proyecto.
 # Configuración declarativa sin IDs hardcodeados:
 # - account_id → data.aws_caller_identity (data.tf)
 # - sns_topic_arn → data.aws_sns_topic (data.tf), con use_sns_topic = true
 # - principals → se construye en locals.tf desde delegated_senders
 # - deploy_role_arn → se inyecta desde el pipeline (TF_VAR_deploy_role_arn)
 #
-# Caso de uso: la cuenta pragma-main (654767188854) envía como pragma.com.co y autoriza
-# a la lambda license-processing de la cuenta 533267042257 a enviar SOLO como
-# licenciasgenia@pragma.com.co.
+# Caso de ejemplo: la cuenta dueña verifica example.com y autoriza a una lambda de la
+# cuenta 222222222222 a enviar SOLO como no-reply@example.com.
 
-client      = "pragma"
+client      = "acme"
 project     = "notif"
-environment = "pdn"
+environment = "dev"
 region      = "us-east-1"
 
+# Tags transversales (PC-IAC-004): llaves y valores en minúscula
 common_tags = {
-  Client      = "pragma"
-  Project     = "notif"
-  Environment = "pdn"
-  Owner       = "cloudops-team"
-  CostCenter  = "pragma-main"
+  client      = "acme"
+  project     = "notif"
+  environment = "dev"
+  owner       = "cloudops-team"
+  costcenter  = "cc-0001"
 }
 
 # Remitente delegado cross-account (cuenta externa: no se puede consultar con data sources)
 # El ARN del rol NO se escribe: locals.tf lo arma con la convención del módulo IAM de somospragma.
-# Resultado: arn:aws:iam::533267042257:role/service-role/pragma-license-pdn-role-lambda-license-license-processing
+# Resultado: arn:aws:iam::222222222222:role/service-role/acme-billing-dev-role-lambda-billing-invoice-sender
 delegated_senders = {
-  "license-processing" = {
-    account_id    = "533267042257"
-    client        = "pragma"
-    project       = "license"
-    environment   = "pdn"
+  "invoice-sender" = {
+    account_id    = "222222222222"
+    client        = "acme"
+    project       = "billing"
+    environment   = "dev"
     service       = "lambda"
-    application   = "license"
-    functionality = "license-processing"
+    application   = "billing"
+    functionality = "invoice-sender"
     path          = "/service-role/"
   }
 }
 
-# Topic SNS existente: pragma-notif-pdn-sns-ses-events (módulo SNS de somospragma)
+# Topic SNS existente: acme-notif-dev-sns-ses-events (módulo SNS de somospragma)
 ses_events_sns_topic_key = "ses-events"
 
 ses_identities_config = {
-  "pragma" = {
-    identity                = "pragma.com.co"
+  "main" = {
+    identity                = "example.com"
     identity_type           = "DOMAIN"
     dkim_signing_key_length = "RSA_2048_BIT"
     configuration_set_key   = "default"
 
     mail_from = {
-      domain                 = "mail.pragma.com.co"
+      domain                 = "mail.example.com"
       behavior_on_mx_failure = "USE_DEFAULT_VALUE"
     }
 
     sending_authorization = {
-      "AllowLicenseProcessingLambda" = {
-        delegated_sender_key   = "license-processing" # principals se inyecta en locals.tf
-        allowed_from_addresses = ["licenciasgenia@pragma.com.co"]
+      "AllowInvoiceSender" = {
+        delegated_sender_key   = "invoice-sender" # principals se inyecta en locals.tf
+        allowed_from_addresses = ["no-reply@example.com"]
       }
     }
 
-    functionality = "transactional-email"
     additional_tags = {
-      Domain = "workload"
+      functionality = "transactional-email"
+      domain        = "workload"
     }
   }
 }
@@ -81,9 +82,9 @@ ses_configuration_sets_config = {
       }
     }
 
-    functionality = "transactional-email"
     additional_tags = {
-      Domain = "workload"
+      functionality = "transactional-email"
+      domain        = "workload"
     }
   }
 }

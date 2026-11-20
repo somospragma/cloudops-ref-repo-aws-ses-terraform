@@ -28,13 +28,9 @@ resource "aws_sesv2_configuration_set" "this" {
     suppressed_reasons = each.value.suppressed_reasons
   }
 
-  # Tags (PC-IAC-004): Name + tags base del módulo + additional_tags
+  # Tags (PC-IAC-004): transversales por default_tags del provider + name + additional_tags
   tags = merge(
-    local.base_module_tags,
-    {
-      Name          = local.configuration_set_names[each.key]
-      Functionality = each.value.functionality
-    },
+    { name = local.configuration_set_names[each.key] },
     each.value.additional_tags
   )
 
@@ -120,13 +116,9 @@ resource "aws_sesv2_email_identity" "this" {
     }
   }
 
-  # Tags (PC-IAC-004): Name + tags base del módulo + additional_tags
+  # Tags (PC-IAC-004): transversales por default_tags del provider + name + additional_tags
   tags = merge(
-    local.base_module_tags,
-    {
-      Name          = each.value.identity
-      Functionality = each.value.functionality
-    },
+    { name = lower(each.value.identity) },
     each.value.additional_tags
   )
 

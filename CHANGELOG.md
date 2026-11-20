@@ -20,5 +20,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Nombres finales inyectables desde el Root (`configuration_set_name`, `event_destination_name`, `policy_name`) con límite de 28 caracteres.
 - Outputs `identity_arns`, `identity_dkim_tokens`, `dns_records`, `configuration_set_names`, `configuration_set_arns` e `identity_policy_names`.
 - Validaciones de seguridad (PC-IAC-020): sin comodines en principals, acciones ni remitentes; `allowed_from_addresses` obligatorio para principals de otra cuenta; `tls_policy = OPTIONAL` solo con `allow_optional_tls = true`.
+- Tags: el módulo solo agrega `name`; los transversales llegan por `default_tags` del provider y los propios por `additional_tags`, con llaves y valores en minúscula.
 - Pruebas automatizadas en `tests/` con provider mock (PC-IAC-018).
 - Ejemplo `sample/` con identidad de dominio, MAIL FROM, eventos a SNS y envío delegado cross-account (PC-IAC-026).

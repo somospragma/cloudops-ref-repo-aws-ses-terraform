@@ -64,10 +64,15 @@ variable "common_tags" {
 
   validation {
     condition = alltrue([
-      for tag in ["Client", "Project", "Environment", "Owner", "CostCenter"] :
+      for tag in ["client", "project", "environment", "owner", "costcenter"] :
       contains(keys(var.common_tags), tag)
     ])
-    error_message = "common_tags must include: Client, Project, Environment, Owner, CostCenter."
+    error_message = "common_tags must include: client, project, environment, owner, costcenter."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.common_tags : k == lower(k) && v == lower(v)])
+    error_message = "common_tags keys and values must be lowercase."
   }
 }
 
@@ -154,7 +159,6 @@ variable "ses_identities_config" {
       allowed_from_addresses = optional(list(string), [])
       source_accounts        = optional(list(string), [])
     })), {})
-    functionality   = string
     additional_tags = optional(map(string), {})
   }))
   default = {}
@@ -190,13 +194,15 @@ variable "ses_configuration_sets_config" {
         default_dimension_value = string
       })), [])
     })), {})
-    functionality   = string
     additional_tags = optional(map(string), {})
   }))
   default = {}
 
   validation {
-    condition     = alltrue([for k, v in var.ses_configuration_sets_config : length(v.functionality) > 0])
-    error_message = "functionality cannot be empty."
+    condition = alltrue([
+      for k, v in var.ses_configuration_sets_config :
+      alltrue([for event in flatten([for d in values(v.event_destinations) : d.matching_event_types]) : length(event) > 0])
+    ])
+    error_message = "matching_event_types values cannot be empty."
   }
 }

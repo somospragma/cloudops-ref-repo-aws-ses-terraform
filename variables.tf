@@ -69,7 +69,7 @@ variable "ses_identities_config" {
     The identity itself is NOT prefixed: it is the real domain or email address.
   EOT
   type = map(object({
-    identity                = string                           # Domain (pragma.com.co) or email (user@pragma.com.co)
+    identity                = string                           # Domain (example.com) or email (user@example.com)
     identity_type           = string                           # DOMAIN | EMAIL
     dkim_signing_key_length = optional(string, "RSA_2048_BIT") # Easy DKIM (DOMAIN only): RSA_1024_BIT | RSA_2048_BIT
     configuration_set_key   = optional(string, "")             # Key in ses_configuration_sets_config used by default
@@ -89,10 +89,19 @@ variable "ses_identities_config" {
       source_accounts        = optional(list(string), []) # Condition aws:SourceAccount
     })), {})
 
-    functionality   = string
-    additional_tags = optional(map(string), {})
+    additional_tags = optional(map(string), {}) # Tags propios, llaves y valores en minúscula
   }))
   default = {}
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.ses_identities_config : [
+        for tag_key, tag_value in v.additional_tags :
+        tag_key == lower(tag_key) && tag_value == lower(tag_value)
+      ]
+    ]))
+    error_message = "additional_tags keys and values must be lowercase."
+  }
 
   validation {
     condition = alltrue([
@@ -150,7 +159,7 @@ variable "ses_identities_config" {
       for k, v in var.ses_identities_config :
       v.mail_from == null || try(endswith(v.mail_from.domain, ".${v.identity}"), false)
     ])
-    error_message = "mail_from.domain must be a subdomain of identity (e.g. mail.pragma.com.co for pragma.com.co)."
+    error_message = "mail_from.domain must be a subdomain of identity (e.g. mail.example.com for example.com)."
   }
 
   validation {
@@ -251,10 +260,19 @@ variable "ses_configuration_sets_config" {
       })), [])
     })), {})
 
-    functionality   = string
-    additional_tags = optional(map(string), {})
+    additional_tags = optional(map(string), {}) # Tags propios, llaves y valores en minúscula
   }))
   default = {}
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.ses_configuration_sets_config : [
+        for tag_key, tag_value in v.additional_tags :
+        tag_key == lower(tag_key) && tag_value == lower(tag_value)
+      ]
+    ]))
+    error_message = "additional_tags keys and values must be lowercase."
+  }
 
   validation {
     condition = alltrue([
