@@ -3,15 +3,20 @@ locals {
   # Prefijo de gobernanza para el ejemplo (PC-IAC-025)
   governance_prefix = "${var.client}-${var.project}-${var.environment}"
 
+  # ARN de los roles delegados según la convención del módulo IAM de somospragma:
+  # role<path>{client}-{project}-{environment}-role-{service}-{application}-{functionality}
+  delegated_sender_role_arns = {
+    for key, sender in var.delegated_senders :
+    key => "arn:${data.aws_partition.current.partition}:iam::${sender.account_id}:role${sender.path}${join("-", [sender.client, sender.project, sender.environment, "role", sender.service, sender.application, sender.functionality])}"
+  }
+
   # Identidades: nombre final de la política (PC-IAC-025) y ARN del rol delegado (PC-IAC-009)
   ses_identities_config_transformed = {
     for key, config in var.ses_identities_config : key => merge(config, {
       policy_name = "${local.governance_prefix}-ses-${key}"
       sending_authorization = {
         for sid, statement in config.sending_authorization : sid => {
-          principals = length(statement.principals) > 0 ? statement.principals : [
-            "arn:aws:iam::${var.delegated_senders[statement.delegated_sender_key].account_id}:role/${var.delegated_senders[statement.delegated_sender_key].role_name}"
-          ]
+          principals             = length(statement.principals) > 0 ? statement.principals : [local.delegated_sender_role_arns[statement.delegated_sender_key]]
           actions                = statement.actions
           allowed_from_addresses = statement.allowed_from_addresses
           source_accounts        = statement.source_accounts

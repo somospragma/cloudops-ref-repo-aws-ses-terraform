@@ -7,7 +7,7 @@
 #
 # Caso de uso: la cuenta pragma-main (654767188854) envía como pragma.com.co y autoriza
 # a la lambda license-processing de la cuenta 533267042257 a enviar SOLO como
-# licenciasgenial@pragma.com.co.
+# licenciasgenia@pragma.com.co.
 
 client      = "pragma"
 project     = "notif"
@@ -23,10 +23,18 @@ common_tags = {
 }
 
 # Remitente delegado cross-account (cuenta externa: no se puede consultar con data sources)
+# El ARN del rol NO se escribe: locals.tf lo arma con la convención del módulo IAM de somospragma.
+# Resultado: arn:aws:iam::533267042257:role/service-role/pragma-license-pdn-role-lambda-license-license-processing
 delegated_senders = {
   "license-processing" = {
-    account_id = "533267042257"
-    role_name  = "license-processing-lambda-role" # Reemplazar por el nombre real del rol de la lambda
+    account_id    = "533267042257"
+    client        = "pragma"
+    project       = "license"
+    environment   = "pdn"
+    service       = "lambda"
+    application   = "license"
+    functionality = "license-processing"
+    path          = "/service-role/"
   }
 }
 
@@ -48,7 +56,7 @@ ses_identities_config = {
     sending_authorization = {
       "AllowLicenseProcessingLambda" = {
         delegated_sender_key   = "license-processing" # principals se inyecta en locals.tf
-        allowed_from_addresses = ["licenciasgenial@pragma.com.co"]
+        allowed_from_addresses = ["licenciasgenia@pragma.com.co"]
       }
     }
 

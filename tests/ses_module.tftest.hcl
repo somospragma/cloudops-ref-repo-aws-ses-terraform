@@ -31,8 +31,8 @@ variables {
       mail_from             = { domain = "mail.pragma.com.co" }
       sending_authorization = {
         "AllowLicenseProcessingLambda" = {
-          principals             = ["arn:aws:iam::533267042257:role/license-processing-lambda-role"]
-          allowed_from_addresses = ["licenciasgenial@pragma.com.co"]
+          principals             = ["arn:aws:iam::533267042257:role/service-role/pragma-license-pdn-role-lambda-license-license-processing"]
+          allowed_from_addresses = ["licenciasgenia@pragma.com.co"]
         }
       }
       functionality = "transactional-email"
@@ -117,7 +117,7 @@ run "policy_document" {
   }
 
   assert {
-    condition     = jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Condition.StringEquals["ses:FromAddress"] == ["licenciasgenial@pragma.com.co"]
+    condition     = jsondecode(aws_sesv2_email_identity_policy.this["pragma"].policy).Statement[0].Condition.StringEquals["ses:FromAddress"] == ["licenciasgenia@pragma.com.co"]
     error_message = "Policy must restrict ses:FromAddress."
   }
 

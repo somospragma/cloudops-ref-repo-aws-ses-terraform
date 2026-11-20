@@ -76,19 +76,45 @@ variable "common_tags" {
 ###########################################
 
 variable "delegated_senders" {
-  description = "Map of delegated (cross-account) senders. locals.tf builds the principal ARN of the sending_authorization statements that reference delegated_sender_key."
+  description = <<-EOT
+    Map of delegated (cross-account) senders. locals.tf builds the role ARN with the naming
+    convention of the somospragma IAM module (cloudops-ref-repo-aws-iam-terraform):
+    arn:<partition>:iam::<account_id>:role<path><client>-<project>-<environment>-role-<service>-<application>-<functionality>
+  EOT
   type = map(object({
-    account_id = string
-    role_name  = string
+    account_id    = string
+    client        = string
+    project       = string
+    environment   = string
+    service       = string
+    application   = string
+    functionality = string
+    path          = optional(string, "/")
   }))
   default = {}
 
   validation {
     condition = alltrue([
       for k, v in var.delegated_senders :
-      can(regex("^[0-9]{12}$", v.account_id)) && length(v.role_name) > 0
+      can(regex("^[0-9]{12}$", v.account_id))
     ])
-    error_message = "delegated_senders.account_id must be a 12-digit AWS account ID and role_name cannot be empty."
+    error_message = "delegated_senders.account_id must be a 12-digit AWS account ID."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.delegated_senders :
+      alltrue([for part in [v.client, v.project, v.environment, v.service, v.application, v.functionality] : can(regex("^[a-z0-9-]+$", part))])
+    ])
+    error_message = "delegated_senders naming parts must contain only lowercase letters, numbers, and hyphens."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.delegated_senders :
+      can(regex("^/([A-Za-z0-9+=,.@_-]+/)*$", v.path))
+    ])
+    error_message = "delegated_senders.path must start and end with '/' (e.g. '/' or '/service-role/')."
   }
 }
 
