@@ -53,20 +53,20 @@ module "ses" {
 }
 ```
 
-Configuración de ejemplo, ya transformada en `locals.tf` del Root (ver `sample/`):
+Configuración de ejemplo, ya transformada en `locals.tf` del Root. Los valores son ilustrativos (`example.com`, cuenta `111111111111` como dueña y `222222222222` como cuenta delegada); cada proyecto define los suyos. En `sample/` hay un caso completo.
 
 ```hcl
 ses_identities_config = {
-  "pragma" = {
-    identity              = "pragma.com.co"
+  "main" = {
+    identity              = "example.com"
     identity_type         = "DOMAIN"
     configuration_set_key = "default"
-    policy_name           = "pragma-notif-pdn-ses-pragma"
-    mail_from             = { domain = "mail.pragma.com.co" }
+    policy_name           = "acme-app-dev-ses-main"
+    mail_from             = { domain = "mail.example.com" }
     sending_authorization = {
-      "AllowLicenseProcessingLambda" = {
-        principals             = ["arn:aws:iam::533267042257:role/<rol-de-la-lambda>"]
-        allowed_from_addresses = ["licenciasgenial@pragma.com.co"]
+      "AllowDelegatedSender" = {
+        principals             = ["arn:aws:iam::222222222222:role/<rol-que-envia>"]
+        allowed_from_addresses = ["no-reply@example.com"]
       }
     }
     functionality = "transactional-email"
@@ -75,10 +75,10 @@ ses_identities_config = {
 
 ses_configuration_sets_config = {
   "default" = {
-    configuration_set_name = "pragma-notif-pdn-ses-default"
+    configuration_set_name = "acme-app-dev-ses-default"
     event_destinations = {
       "events" = {
-        event_destination_name = "pragma-notif-pdn-ses-events"
+        event_destination_name = "acme-app-dev-ses-events"
         matching_event_types   = ["BOUNCE", "COMPLAINT"]
         sns_topic_arn          = "<ARN desde data.aws_sns_topic>"
       }
@@ -110,7 +110,7 @@ La key del mapa (`^[a-z0-9-]+$`, máximo 20 caracteres) nombra la política y lo
 
 | Atributo | Tipo | Default | Descripción |
 |---|---|---|---|
-| `identity` | `string` | n/a | Dominio (`pragma.com.co`) o correo (`user@pragma.com.co`). Se valida el formato según `identity_type`. |
+| `identity` | `string` | n/a | Dominio (`example.com`) o correo (`user@example.com`). Se valida el formato según `identity_type`. |
 | `identity_type` | `string` | n/a | `DOMAIN` o `EMAIL`. |
 | `dkim_signing_key_length` | `string` | `RSA_2048_BIT` | Easy DKIM, solo DOMAIN. `RSA_1024_BIT` o `RSA_2048_BIT`. |
 | `configuration_set_key` | `string` | `""` | Key de `ses_configuration_sets_config` usada por defecto. Debe existir. |
@@ -165,14 +165,89 @@ La key del mapa (`^[a-z0-9-]+$`, máximo 20 caracteres) nombra la política y lo
 | `configuration_set_arns` | Mapa `key => ARN` del configuration set. |
 | `identity_policy_names` | Mapa `identity_key => nombre` de la política de sending authorization. |
 
-Formato de `dns_records` para `pragma.com.co` con MAIL FROM `mail.pragma.com.co` en `us-east-1`:
+Formato de `dns_records` para `example.com` con MAIL FROM `mail.example.com` en `us-east-1`:
 
 | name | type | value |
 |---|---|---|
-| `<token>._domainkey.pragma.com.co` (x3) | CNAME | `<token>.dkim.amazonses.com` |
-| `mail.pragma.com.co` | MX | `10 feedback-smtp.us-east-1.amazonses.com` |
-| `mail.pragma.com.co` | TXT | `v=spf1 include:amazonses.com ~all` |
-| `_dmarc.pragma.com.co` | TXT | `v=DMARC1; p=none;` (sugerido) |
+| `<token>._domainkey.example.com` (x3) | CNAME | `<token>.dkim.amazonses.com` |
+| `mail.example.com` | MX | `10 feedback-smtp.us-east-1.amazonses.com` |
+| `mail.example.com` | TXT | `v=spf1 include:amazonses.com ~all` |
+| `_dmarc.example.com` | TXT | `v=DMARC1; p=none;` (sugerido) |
+
+## Qué es parametrizable y qué es fijo
+
+El módulo no contiene valores de ningún proyecto: dominios, correos, ARN de roles o lambdas, cuentas y topics entran siempre por variables desde el Root.
+
+### Parametrizable (lo define cada proyecto)
+
+| Qué | Dónde |
+|---|---|
+| Gobernanza y cuenta dueña | `client`, `project`, `environment`, `account_id` |
+| Dominio o correo a verificar | `ses_identities_config.<key>.identity` / `identity_type` |
+| Largo de la llave DKIM | `dkim_signing_key_length` (`RSA_1024_BIT` \| `RSA_2048_BIT`) |
+| Configuration set por defecto de la identidad | `configuration_set_key` |
+| Subdominio MAIL FROM y comportamiento ante fallo de MX | `mail_from.domain`, `mail_from.behavior_on_mx_failure` |
+| Quién puede enviar en nombre de la identidad (ARN de cuenta o rol) | `sending_authorization.<Sid>.principals` |
+| Acciones permitidas al remitente delegado | `sending_authorization.<Sid>.actions` |
+| Remitentes permitidos (`From`) | `sending_authorization.<Sid>.allowed_from_addresses` |
+| Cuentas origen (solo integraciones servicio a servicio) | `sending_authorization.<Sid>.source_accounts` |
+| TLS, métricas de reputación, envío activo, supresión | `ses_configuration_sets_config.<key>.*` |
+| Destino de eventos y tipos de evento | `event_destinations.<key>`: `sns_topic_arn` \| `event_bus_arn` \| `cloudwatch_dimensions` |
+| Nombres finales de los recursos | `policy_name`, `configuration_set_name`, `event_destination_name` |
+| Tags propios | `functionality`, `additional_tags` |
+
+### Defaults seguros (se pueden cambiar)
+
+| Parámetro | Default |
+|---|---|
+| `tls_policy` | `REQUIRE` |
+| `dkim_signing_key_length` | `RSA_2048_BIT` |
+| `suppressed_reasons` | `["BOUNCE", "COMPLAINT"]` |
+| `reputation_metrics_enabled` / `sending_enabled` | `true` |
+| `actions` | `["ses:SendEmail", "ses:SendRawEmail"]` |
+| `behavior_on_mx_failure` | `USE_DEFAULT_VALUE` |
+| `event_destinations.<key>.enabled` | `true` |
+
+### Fijo en el módulo
+
+| Qué | Valor |
+|---|---|
+| Patrón de nombres (si el Root no inyecta el nombre) | `{client}-{project}-{environment}-ses-{key}` |
+| Largo máximo de nombres | 28 caracteres (PC-IAC-003) |
+| Largo máximo de las keys de los mapas | 20 caracteres, `^[a-z0-9-]+$` |
+| Tags del módulo | `ManagedBy = "terraform"`, `Module = "ses-module"`, `Name` |
+| Protección de la identidad | `prevent_destroy = true` |
+| TTL de `dns_records` | 1800 |
+| SPF de MAIL FROM | `v=spf1 include:amazonses.com ~all` |
+| DMARC sugerido | `v=DMARC1; p=none;` |
+
+### Reglas de seguridad que no se pueden omitir (PC-IAC-020)
+
+- `principals` solo acepta ARN de cuenta (`arn:aws:iam::<12 dígitos>:root`) o de rol (`arn:aws:iam::<12 dígitos>:role/<nombre>`). No acepta `*`.
+- `actions` solo acepta acciones de envío de SES, sin comodines.
+- `allowed_from_addresses` acepta solo direcciones explícitas del dominio de la identidad (o la propia identidad si es EMAIL), sin comodines.
+- Si algún principal no pertenece a `account_id`, `allowed_from_addresses` es obligatorio. La validación falla en `plan`.
+- `tls_policy = "OPTIONAL"` solo se acepta con `allow_optional_tls = true`.
+- `mail_from` solo aplica a identidades DOMAIN, y su dominio debe ser subdominio de la identidad.
+- `configuration_set_key` debe existir en `ses_configuration_sets_config`.
+- Cada destino de eventos define exactamente uno de SNS, EventBridge (bus `default`) o CloudWatch.
+
+### No soportado en v1
+
+Si un proyecto lo necesita, se agrega en una versión menor:
+
+- Registros DNS (Route 53 u otro proveedor): se publican con el output `dns_records`.
+- IAM, topics SNS y recursos de nivel cuenta (sandbox, supresión de cuenta, VDM).
+- BYODKIM (llave DKIM propia).
+- Dominio de tracking de aperturas y clics (`tracking_options`).
+- IP pool dedicado y `max_delivery_seconds`.
+- Destinos Kinesis Firehose y Pinpoint.
+- Templates y receipt rules.
+
+### Consideraciones al reutilizar
+
+- **28 caracteres.** Usa `project` y keys cortos: `{client}-{project}-{environment}-ses-` ya ocupa entre 11 y 36 caracteres.
+- **`prevent_destroy`.** Impide `terraform destroy` de identidades también en `dev`; para eliminarlas hay que quitar el bloque en una rama del módulo.
 
 ## Qué queda fuera del módulo
 

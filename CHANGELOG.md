@@ -21,4 +21,4 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Outputs `identity_arns`, `identity_dkim_tokens`, `dns_records`, `configuration_set_names`, `configuration_set_arns` e `identity_policy_names`.
 - Validaciones de seguridad (PC-IAC-020): sin comodines en principals, acciones ni remitentes; `allowed_from_addresses` obligatorio para principals de otra cuenta; `tls_policy = OPTIONAL` solo con `allow_optional_tls = true`.
 - Pruebas automatizadas en `tests/` con provider mock (PC-IAC-018).
-- Ejemplo `sample/` para la cuenta pragma-main con envío delegado a la lambda license-processing (PC-IAC-026).
+- Ejemplo `sample/` con identidad de dominio, MAIL FROM, eventos a SNS y envío delegado cross-account (PC-IAC-026).
